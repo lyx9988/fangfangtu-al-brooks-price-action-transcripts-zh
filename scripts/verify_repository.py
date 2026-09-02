@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
@@ -15,19 +16,20 @@ from urllib.parse import unquote, urlparse
 ROOT = Path(__file__).resolve().parent.parent
 METADATA_JSON = ROOT / "metadata/index.json"
 METADATA_CSV = ROOT / "metadata/index.csv"
+SOURCES_JSON = ROOT / "metadata/sources.json"
 LEARNING_CATALOG = ROOT / "学习目录.md"
-EXPECTED_RECORDS = 161
-EXPECTED_COMPLETED = 160
+EXPECTED_RECORDS = 164
+EXPECTED_COMPLETED = 163
 EXPECTED_UNAVAILABLE = 1
-EXPECTED_PLATFORM_RECORDS = {"YouTube": 154, "Bilibili": 7}
-EXPECTED_PLATFORM_TRANSCRIPTS = {"youtube": 153, "bilibili": 7}
+EXPECTED_PLATFORM_RECORDS = {"YouTube": 157, "Bilibili": 7}
+EXPECTED_PLATFORM_TRANSCRIPTS = {"youtube": 156, "bilibili": 7}
 EXPECTED_CATEGORIES = {
     "01 入门必看": 12,
     "02 读图基础、信号与复盘": 9,
     "03 市场结构、突破与反转": 17,
     "04 交易管理、早盘与市场策略": 20,
     "05 心理、职业与长期纪律": 6,
-    "06 实盘与复盘案例": 92,
+    "06 实盘与复盘案例": 95,
     "07 期权与补充资料": 4,
 }
 EXPECTED_FIELDS = [
@@ -74,6 +76,15 @@ BANNED_SUFFIXES = {
 BANNED_DIRECTORY_NAMES = {".cache", ".audio_transcription_cache", "__pycache__"}
 BANNED_FILENAMES = {".DS_Store"}
 RAW_METADATA_NAME_PARTS = {"api_response", "playlist.json", "response_dump"}
+EXPECTED_SOURCES = {
+    ("YouTube", "方方土PriceAction", "https://www.youtube.com/@LouiePriceAction/videos"),
+    ("Bilibili", "z说交易", "https://space.bilibili.com/101513971/video"),
+}
+REQUIRED_MAINTENANCE_FILES = {
+    "metadata/sources.json",
+    "scripts/check_new_videos.py",
+    "scripts/render_catalog.py",
+}
 
 
 def repo_files() -> list[Path]:
@@ -237,6 +248,31 @@ def verify_mapping(records: list[dict[str, object]], errors: list[str]) -> dict[
     return expected_paths
 
 
+def verify_sources(errors: list[str]) -> None:
+    if not SOURCES_JSON.is_file():
+        errors.append("缺少 metadata/sources.json")
+        return
+    try:
+        sources = json.loads(SOURCES_JSON.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        errors.append(f"metadata/sources.json 无法读取：{exc}")
+        return
+    if not isinstance(sources, list):
+        errors.append("metadata/sources.json 顶层必须是数组")
+        return
+    actual = {
+        (
+            str(source.get("platform") or ""),
+            str(source.get("author") or ""),
+            str(source.get("listing_url") or ""),
+        )
+        for source in sources
+        if isinstance(source, dict)
+    }
+    if actual != EXPECTED_SOURCES or len(sources) != len(EXPECTED_SOURCES):
+        errors.append("metadata/sources.json 的公开来源不正确")
+
+
 def verify_transcripts(
     records: list[dict[str, object]], expected_paths: dict[str, Path], errors: list[str]
 ) -> int:
@@ -373,6 +409,11 @@ def verify_filesystem(errors: list[str]) -> dict[str, int]:
     symlinks = [relative(path) for path in ROOT.rglob("*") if path.is_symlink()]
     patterns = sensitive_patterns()
 
+    actual_files = {relative(path) for path in repo_files()}
+    missing_maintenance = sorted(REQUIRED_MAINTENANCE_FILES - actual_files)
+    if missing_maintenance:
+        errors.append(f"缺少维护文件：{', '.join(missing_maintenance)}")
+
     for path in repo_files():
         rel = relative(path)
         stat = path.stat()
@@ -426,7 +467,7 @@ def verify_filesystem(errors: list[str]) -> dict[str, int]:
     }
 
 
-def verify_git(errors: list[str]) -> str:
+def verify_git(errors: list[str], allow_dirty: bool = False) -> str:
     if not (ROOT / ".git").exists():
         return "not-initialized"
     branch = subprocess.run(
@@ -446,19 +487,29 @@ def verify_git(errors: list[str]) -> str:
         capture_output=True,
     ).stdout.strip()
     if status:
+        if allow_dirty:
+            return "dirty-allowed"
         errors.append("Git 工作区不干净")
         return "dirty"
     return "clean"
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="验证转录仓库的结构、内容和安全性")
+    parser.add_argument(
+        "--allow-dirty",
+        action="store_true",
+        help="允许开发中的未提交修改；发布验收时不要使用",
+    )
+    args = parser.parse_args()
     errors: list[str] = []
     records, csv_records = read_metadata(errors)
+    verify_sources(errors)
     expected_paths = verify_mapping(records, errors) if records else {}
     transcripts_checked = verify_transcripts(records, expected_paths, errors) if records else 0
     local_links = verify_markdown_links(records, errors) if records else 0
     filesystem = verify_filesystem(errors)
-    git_state = verify_git(errors)
+    git_state = verify_git(errors, allow_dirty=args.allow_dirty)
 
     if errors:
         print(f"验收失败，共 {len(errors)} 项：")

@@ -8,11 +8,11 @@
 
 | 来源 | 视频记录 | 完整转录 | 无法公开访问 |
 |---|---:|---:|---:|
-| YouTube | 154 | 153 | 1 |
+| YouTube | 157 | 156 | 1 |
 | Bilibili | 7 | 7 | 0 |
-| **合计** | **161** | **160** | **1** |
+| **合计** | **164** | **163** | **1** |
 
-160 份转录稿均包含时间码，并已完成逐行语义校对。另有 1 条视频目前无法公开访问，因此只保留索引记录和原视频链接。
+163 份转录稿均包含时间码，并已完成逐行语义校对。另有 1 条视频目前无法公开访问，因此只保留索引记录和原视频链接。
 
 ## 如何使用
 
@@ -29,12 +29,15 @@
 ├── README.md
 ├── 学习目录.md
 ├── transcripts/
-│   ├── youtube/      # 153 份
+│   ├── youtube/      # 156 份
 │   └── bilibili/     # 7 份
 ├── metadata/
-│   ├── index.csv     # 161 条记录
-│   └── index.json    # 161 条记录
+│   ├── index.csv     # 164 条记录
+│   ├── index.json    # 164 条记录
+│   └── sources.json  # 公开来源清单
 └── scripts/
+    ├── check_new_videos.py
+    ├── render_catalog.py
     └── verify_repository.py
 ```
 
@@ -42,6 +45,20 @@
 
 ```bash
 python3 scripts/verify_repository.py
+```
+
+## 更新检查
+
+下面的命令会读取两个公开来源的最新视频清单，并与现有索引比较。它不使用浏览器 Cookie 或登录状态；如果某个平台暂时拒绝公开请求，会明确报告错误。
+
+```bash
+python3 scripts/check_new_videos.py
+```
+
+更新索引后，可以重新生成 CSV 和学习目录：
+
+```bash
+python3 scripts/render_catalog.py
 ```
 
 ## 版权与风险说明
