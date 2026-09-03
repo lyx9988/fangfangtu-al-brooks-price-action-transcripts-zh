@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "如在研究或资料整理中使用本仓库，请引用此仓库；原视频及原始内容仍应归功于对应作者和平台。"
+title: "方方土价格行为学中文转录｜Al Brooks Price Action Transcripts"
+type: dataset
+authors:
+  - family-names: "a2318491287-design"
+    alias: "a2318491287-design"
+version: "2026.09.03"
+date-released: 2026-09-03
+repository-code: "https://github.com/a2318491287-design/fangfangtu-al-brooks-price-action-transcripts-zh"
+url: "https://github.com/a2318491287-design/fangfangtu-al-brooks-price-action-transcripts-zh"
+abstract: "方方土 PriceAction 等公开来源中与 Al Brooks 价格行为学相关视频的中文时间码转录、原视频映射和主题化学习目录。"
+keywords:
+  - "方方土价格行为学"
+  - "Al Brooks"
+  - "price action"
+  - "Chinese transcripts"
+  - "YouTube transcripts"
+  - "Bilibili"
+  - "trading education"

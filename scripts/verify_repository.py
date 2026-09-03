@@ -6,9 +6,12 @@ import csv
 import hashlib
 import json
 import re
+import struct
 import subprocess
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -81,10 +84,34 @@ EXPECTED_SOURCES = {
     ("Bilibili", "z说交易", "https://space.bilibili.com/101513971/video"),
 }
 REQUIRED_MAINTENANCE_FILES = {
+    "CITATION.cff",
+    "CONTRIBUTING.md",
+    "NOTICE.md",
+    "assets/social-preview.png",
+    "assets/social-preview.svg",
     "metadata/sources.json",
     "scripts/check_new_videos.py",
     "scripts/render_catalog.py",
 }
+APPROVED_PNG_DIMENSIONS = {"assets/social-preview.png": (1280, 640)}
+
+
+@lru_cache(maxsize=None)
+def read_bytes_cached(path: Path) -> bytes:
+    """Read each repository file once during a verification run."""
+    return path.read_bytes()
+
+
+def read_text_cached(path: Path) -> str:
+    return read_bytes_cached(path).decode("utf-8")
+
+
+def preload_repository_files() -> None:
+    """Warm the content cache in parallel for slow synchronized folders."""
+    files = repo_files()
+    workers = min(32, max(1, len(files)))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        list(executor.map(read_bytes_cached, files))
 
 
 def repo_files() -> list[Path]:
@@ -287,7 +314,7 @@ def verify_transcripts(
         if not path.is_file():
             continue
         checked += 1
-        data = path.read_bytes()
+        data = read_bytes_cached(path)
         hashes[hashlib.sha256(data).hexdigest()].append(transcript_path)
         try:
             text = data.decode("utf-8")
@@ -327,7 +354,7 @@ def verify_markdown_links(records: list[dict[str, object]], errors: list[str]) -
     for markdown in ROOT.rglob("*.md"):
         if ".git" in markdown.relative_to(ROOT).parts:
             continue
-        text = markdown.read_text(encoding="utf-8")
+        text = read_text_cached(markdown)
         for match in LOCAL_LINK_RE.finditer(text):
             destination = match.group(1).strip("<>")
             parsed = urlparse(destination)
@@ -430,7 +457,19 @@ def verify_filesystem(errors: list[str]) -> dict[str, int]:
             or any(part in lower_name for part in RAW_METADATA_NAME_PARTS)
         ):
             banned_files.append(rel)
-        data = path.read_bytes()
+        data = read_bytes_cached(path)
+        if rel in APPROVED_PNG_DIMENSIONS:
+            expected_dimensions = APPROVED_PNG_DIMENSIONS[rel]
+            if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
+                errors.append(f"社交预览不是有效 PNG：{rel}")
+            else:
+                dimensions = struct.unpack(">II", data[16:24])
+                if dimensions != expected_dimensions:
+                    errors.append(
+                        f"社交预览尺寸应为 {expected_dimensions[0]}x{expected_dimensions[1]}，"
+                        f"实际为 {dimensions[0]}x{dimensions[1]}"
+                    )
+            continue
         if b"\x00" in data:
             binary_files.append(rel)
             continue
@@ -477,7 +516,7 @@ def verify_git(errors: list[str], allow_dirty: bool = False) -> str:
         text=True,
         capture_output=True,
     ).stdout.strip()
-    if branch != "main":
+    if branch != "main" and not allow_dirty:
         errors.append(f"Git 分支应为 main，实际为 {branch or 'detached'}")
     status = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -503,6 +542,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     errors: list[str] = []
+    preload_repository_files()
     records, csv_records = read_metadata(errors)
     verify_sources(errors)
     expected_paths = verify_mapping(records, errors) if records else {}

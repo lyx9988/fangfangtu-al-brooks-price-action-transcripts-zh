@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import csv
+import io
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -76,11 +78,13 @@ def render(records: list[dict[str, object]]) -> str:
         if row["video_id"] == HISTORY_START_VIDEO_ID
     )
     lines = [
-        "# 方方土价格行为学学习目录",
+        "# 方方土价格行为学学习目录｜Al Brooks Price Action",
         "",
-        f"这里收录 {len(records)} 条视频记录：{len(completed)} 条有完整、带时间码并已校对的中文转录稿，{len(unavailable)} 条目前无法公开访问。每个视频只保留一份规范转录稿。",
+        f"这里按主题和难度整理方方土 PriceAction 等公开来源中与 Al Brooks 价格行为学相关的视频，共 {len(records)} 条记录：{len(completed)} 条有完整、带时间码并已校对的中文转录稿，{len(unavailable)} 条目前无法公开访问。每个视频只保留一份规范转录稿。",
         "",
         "建议先完成 01～05，再进入 06 的实盘与复盘；07 是补充内容。目录中的勾选框可用于记录学习进度。",
+        "",
+        "[返回仓库首页](README.md) · [CSV 视频索引](metadata/index.csv) · [JSON 视频索引](metadata/index.json)",
         "",
         "## 章节概览",
         "",
@@ -140,6 +144,13 @@ def render(records: list[dict[str, object]]) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="生成规范化索引和学习目录")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="只检查生成结果是否与当前文件一致，不写入文件",
+    )
+    args = parser.parse_args()
     records = json.loads(INDEX_JSON.read_text(encoding="utf-8"))
     records.sort(
         key=lambda row: (
@@ -149,14 +160,33 @@ def main() -> None:
             str(row["video_id"]),
         )
     )
-    INDEX_JSON.write_text(
-        json.dumps(records, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    with INDEX_CSV.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDS, lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(records)
-    CATALOG.write_text(render(records), encoding="utf-8")
+    json_text = json.dumps(records, ensure_ascii=False, indent=2) + "\n"
+    csv_buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(csv_buffer, fieldnames=FIELDS, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(records)
+    csv_text = csv_buffer.getvalue()
+    catalog_text = render(records)
+
+    if args.check:
+        stale = [
+            path.name
+            for path, expected in (
+                (INDEX_JSON, json_text),
+                (INDEX_CSV, csv_text),
+                (CATALOG, catalog_text),
+            )
+            if not path.is_file() or path.read_text(encoding="utf-8") != expected
+        ]
+        if stale:
+            raise SystemExit(f"生成文件需要更新：{', '.join(stale)}")
+        completed_count = sum(row["status"] == "completed" for row in records)
+        print(f"catalog current records={len(records)} completed={completed_count}")
+        return
+
+    INDEX_JSON.write_text(json_text, encoding="utf-8")
+    INDEX_CSV.write_text(csv_text, encoding="utf-8")
+    CATALOG.write_text(catalog_text, encoding="utf-8")
     print(
         f"rendered records={len(records)} completed="
         f"{sum(row['status'] == 'completed' for row in records)}"
