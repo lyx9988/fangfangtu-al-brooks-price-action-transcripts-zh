@@ -13,7 +13,10 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
+
+sys.dont_write_bytecode = True
+from transcript_paths import TRANSCRIPT_ROOT, canonical_transcript_path
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +28,7 @@ EXPECTED_RECORDS = 164
 EXPECTED_COMPLETED = 163
 EXPECTED_UNAVAILABLE = 1
 EXPECTED_PLATFORM_RECORDS = {"YouTube": 157, "Bilibili": 7}
-EXPECTED_PLATFORM_TRANSCRIPTS = {"youtube": 156, "bilibili": 7}
+EXPECTED_PLATFORM_TRANSCRIPTS = {"YouTube-方方土": 156, "Bilibili-z说交易": 7}
 EXPECTED_CATEGORIES = {
     "01 入门必看": 12,
     "02 读图基础、信号与复盘": 9,
@@ -55,9 +58,6 @@ EXPECTED_FIELDS = [
 MAX_FILE_SIZE = 1024 * 1024
 TIMECODE_RE = re.compile(r"^\[(\d{2}):(\d{2}):(\d{2})\]", re.MULTILINE)
 LOCAL_LINK_RE = re.compile(r"\]\((<[^>]+>|[^)\s]+)\)")
-CATALOG_TRANSCRIPT_LINK_RE = re.compile(
-    r"\]\((transcripts/(?:youtube|bilibili)/[^)]+\.md)\)"
-)
 BANNED_SUFFIXES = {
     ".aac",
     ".avi",
@@ -92,6 +92,7 @@ REQUIRED_MAINTENANCE_FILES = {
     "metadata/sources.json",
     "scripts/check_new_videos.py",
     "scripts/render_catalog.py",
+    "scripts/transcript_paths.py",
 }
 APPROVED_PNG_DIMENSIONS = {"assets/social-preview.png": (1280, 640)}
 
@@ -231,8 +232,11 @@ def verify_mapping(records: list[dict[str, object]], errors: list[str]) -> dict[
         if status != "completed":
             continue
 
-        directory = {"YouTube": "youtube", "Bilibili": "bilibili"}.get(platform)
-        expected_path = f"transcripts/{directory}/{video_id}.md" if directory else ""
+        try:
+            expected_path = canonical_transcript_path(record)
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"转录命名字段无效：{platform}/{video_id}")
+            continue
         if transcript_path != expected_path:
             errors.append(f"转录路径不匹配：{platform}/{video_id} -> {transcript_path}")
             continue
@@ -262,14 +266,14 @@ def verify_mapping(records: list[dict[str, object]], errors: list[str]) -> dict[
     actual_paths = {
         relative(path): path
         for platform in EXPECTED_PLATFORM_TRANSCRIPTS
-        for path in (ROOT / "transcripts" / platform).glob("*.md")
+        for path in (ROOT / TRANSCRIPT_ROOT / platform).glob("*.md")
     }
     if set(actual_paths) != set(expected_paths):
         missing = sorted(set(expected_paths) - set(actual_paths))
         extra = sorted(set(actual_paths) - set(expected_paths))
         errors.append(f"索引与转录文件不一致：缺少 {len(missing)}，多出 {len(extra)}")
     for platform, expected_count in EXPECTED_PLATFORM_TRANSCRIPTS.items():
-        actual_count = sum(path.startswith(f"transcripts/{platform}/") for path in actual_paths)
+        actual_count = sum(path.startswith(f"{TRANSCRIPT_ROOT}/{platform}/") for path in actual_paths)
         if actual_count != expected_count:
             errors.append(f"{platform} 转录数量应为 {expected_count}，实际为 {actual_count}")
     return expected_paths
@@ -373,7 +377,11 @@ def verify_markdown_links(records: list[dict[str, object]], errors: list[str]) -
         errors.append("缺少 学习目录.md")
         return local_link_count
     catalog = LEARNING_CATALOG.read_text(encoding="utf-8")
-    transcript_links = CATALOG_TRANSCRIPT_LINK_RE.findall(catalog)
+    transcript_links = [
+        unquote(match.group(1).strip("<>"))
+        for match in LOCAL_LINK_RE.finditer(catalog)
+        if unquote(match.group(1).strip("<>")).startswith(f"{TRANSCRIPT_ROOT}/")
+    ]
     if len(transcript_links) != EXPECTED_COMPLETED or len(set(transcript_links)) != EXPECTED_COMPLETED:
         errors.append(
             f"学习目录的规范转录链接应为 {EXPECTED_COMPLETED} 个且不重复，实际为 "
@@ -386,7 +394,7 @@ def verify_markdown_links(records: list[dict[str, object]], errors: list[str]) -
         if catalog.count(f"]({source_url})") != 1:
             errors.append(f"学习目录中的原视频链接数量不为 1：{record.get('video_id')}")
         transcript_path = str(record.get("transcript_path") or "")
-        if transcript_path and catalog.count(f"]({transcript_path})") != 1:
+        if transcript_path and catalog.count(f"]({quote(transcript_path, safe='/')})") != 1:
             errors.append(f"学习目录中的转录链接数量不为 1：{record.get('video_id')}")
     return local_link_count
 

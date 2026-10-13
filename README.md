@@ -13,8 +13,8 @@
 | 你想做什么 | 入口 |
 |---|---|
 | 按由浅入深的顺序学习 | [方方土价格行为学学习目录](学习目录.md) |
-| 浏览 YouTube 中文时间码转录 | [YouTube 转录目录](transcripts/youtube) |
-| 浏览 Bilibili 中文时间码转录 | [Bilibili 转录目录](transcripts/bilibili) |
+| 浏览 YouTube 中文时间码转录 | [方方土 YouTube 转录目录](转录稿/YouTube-方方土) |
+| 浏览 Bilibili 中文时间码转录 | [z说交易 Bilibili 转录目录](转录稿/Bilibili-z说交易) |
 | 查询“原视频 → 转录稿 → 学习分类” | [CSV 视频索引](metadata/index.csv) · [JSON 视频索引](metadata/index.json) |
 | 查看公开来源 | [来源清单](metadata/sources.json) |
 | 报告错字或时间码问题 | [勘误与贡献说明](CONTRIBUTING.md) |
@@ -48,7 +48,7 @@
 1. 从公开页面核对视频记录和原视频链接。
 2. 优先使用公开字幕；没有字幕时，再对公开视频音轨进行语音转录。
 3. 保留时间码，按上下文校正常见术语和明显识别错误。
-4. 按视频 ID 去重；分类和学习顺序只写入索引与学习目录，不复制转录稿。
+4. 按视频 ID 去重；每个视频只保留一份转录稿，分类和学习顺序由索引与学习目录统一维护。
 5. 检查数量、映射、时间码、本地链接、重复文件、大文件和常见敏感信息。
 
 “已校对”表示完成了逐行语义检查，不代表转录能够替代原视频，也不保证每个口语停顿、语气词或专有名词都与原音逐字一致。如发现问题，请按[勘误格式](CONTRIBUTING.md#提交转录勘误)提供视频 ID 和时间码。
@@ -65,9 +65,9 @@
 ├── assets/
 │   ├── social-preview.svg
 │   └── social-preview.png
-├── transcripts/
-│   ├── youtube/      # 156 份
-│   └── bilibili/     # 7 份
+├── 转录稿/
+│   ├── YouTube-方方土/     # 156 份
+│   └── Bilibili-z说交易/   # 7 份
 ├── metadata/
 │   ├── index.csv     # 164 条记录
 │   ├── index.json    # 164 条记录
@@ -75,8 +75,11 @@
 └── scripts/
     ├── check_new_videos.py
     ├── render_catalog.py
+    ├── transcript_paths.py
     └── verify_repository.py
 ```
+
+文件名采用“分类编号-学习顺序 中文标题 [视频ID].md”，例如 `01-001 踏上交易之路(1)：培养正确的交易理念 & 如何开始学习 [WUGRoGirK6U].md`。中文标题方便查找，必要英文术语和视频 ID 保留。过长标题会在文件名中缩短，正文及索引保留完整原标题。
 
 检查仓库结构和内容：
 

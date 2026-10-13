@@ -26,6 +26,7 @@
 - 与 Al Brooks 或价格行为交易学习直接相关；
 - 包含稳定的平台视频 ID 和原视频链接；
 - 每个视频只新增一份规范转录稿；
+- 路径使用 `scripts/transcript_paths.py` 中的 `canonical_transcript_path()` 生成，保持“分类编号-学习顺序 中文标题 [视频ID].md”的命名规则；
 - 转录稿包含时间码，并注明转录来源和校对状态；
 - 更新 `metadata/index.json` 后运行 `python3 scripts/render_catalog.py`，同步生成 CSV 和学习目录。
 

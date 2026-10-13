@@ -5,8 +5,13 @@ import argparse
 import csv
 import io
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import quote
+
+sys.dont_write_bytecode = True
+from transcript_paths import DISPLAY_TITLES
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -117,9 +122,9 @@ def render(records: list[dict[str, object]]) -> str:
                 lines.extend([f"### 近期实盘与边做边讲（01～{history_start - 1:02d}）", ""])
             if category == "06 实盘与复盘案例" and order == history_start:
                 lines.extend(["", f"### 历史实盘与复盘（{history_start:02d}～{len(rows):02d}）", ""])
-            title = escape_markdown(str(row["title"]))
+            title = escape_markdown(DISPLAY_TITLES.get(str(row["video_id"]), str(row["title"])))
             lines.append(
-                f"- [ ] **{order:02d}** [{title}]({row['transcript_path']}) · "
+                f"- [ ] **{order:02d}** [{title}]({quote(str(row['transcript_path']), safe='/')}) · "
                 f"[原视频]({row['source_url']}) · {row['platform']} · "
                 f"{duration_label(int(row['duration_seconds']))}"
             )
